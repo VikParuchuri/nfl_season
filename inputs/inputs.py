@@ -10,6 +10,8 @@ from percept.datahandlers.inputs import BaseInput
 import os
 from itertools import chain
 from percept.tests.framework import Tester, CSVInputTester
+import logging
+log = logging.getLogger(__name__)
 
 class NFLFormats(DataFormats):
     multicsv = "multicsv"
@@ -42,4 +44,5 @@ class NFLInput(BaseInput):
                 else:
                     csv_data.append(row + [infile.split(".")[0]])
             all_csv_data.append(csv_data)
-        self.data = chain.from_iterable(all_csv_data)
+        csv_data = list(chain.from_iterable(all_csv_data))
+        self.data = csv_data
