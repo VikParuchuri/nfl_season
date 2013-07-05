@@ -3,6 +3,7 @@ from percept.conf.base import settings
 from percept.utils.input import DataFormats
 from percept.tests.framework import CSVInputTester
 from percept.datahandlers.inputs import BaseInput
+from percept.utils.models import get_namespace
 import os
 from itertools import chain
 import logging
@@ -19,6 +20,7 @@ class NFLInput(BaseInput):
     tester = CSVInputTester
     test_cases = [{'stream' : os.path.join(settings.PROJECT_PATH, "data")}]
     help_text = "Load multiple nfl season csv files."
+    namespace = get_namespace(__module__)
 
     def read_input(self, directory, has_header=True):
         """

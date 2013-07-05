@@ -19,6 +19,8 @@ class NFLFormatter(JSONFormat):
         {'stream' : os.path.abspath(os.path.join(settings.PACKAGE_PATH,'tests/data/csv/1/data.csv')), 'dataformat' : DataFormats.csv},
         {'stream' : os.path.abspath(os.path.join(settings.PROJECT_PATH, "data")), 'dataformat' : NFLFormats.multicsv}
     ]
+    namespace = get_namespace(__module__)
+
     def from_multicsv(self,input_data):
         """
         Reads multicsv format input data and converts to json.
