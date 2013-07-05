@@ -1,15 +1,10 @@
 import csv
-
-from percept.fields.base import Dict
-from percept.utils.models import FieldModel
 from percept.conf.base import settings
 from percept.utils.input import DataFormats
-from percept.utils.models import RegistryCategories
 from percept.tests.framework import CSVInputTester
 from percept.datahandlers.inputs import BaseInput
 import os
 from itertools import chain
-from percept.tests.framework import Tester, CSVInputTester
 import logging
 log = logging.getLogger(__name__)
 
