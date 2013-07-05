@@ -9,20 +9,23 @@ from percept.tests.framework import CSVInputTester
 from percept.datahandlers.inputs import BaseInput
 import os
 from itertools import chain
+from percept.tests.framework import Tester, CSVInputTester
+
+class NFLFormats(DataFormats):
+    multicsv = "multicsv"
 
 class NFLInput(BaseInput):
     """
     Extends baseinput to read nfl season data csv
     """
-    input_format = DataFormats.csv
-    help_text = "Example class to load in csv files."
+    input_format = NFLFormats.multicsv
+    tester = CSVInputTester
+    test_cases = [{'stream' : os.path.join(settings.PROJECT_PATH, "data")}]
+    help_text = "Load multiple nfl season csv files."
 
     def read_input(self, directory, has_header=True):
         """
-        stream is any reader object that exposes the .read() interface
-        for example:
-        csv_input = CSVInput()
-        csv_input.read_input(open("csvfile.csv"))
+        directory is a path to a directory with multiple csv files
         """
 
         datafiles = [ f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory,f))]
@@ -37,6 +40,6 @@ class NFLInput(BaseInput):
                         csv_data.append([str(i) for i in xrange(0,len(row))])
                     csv_data.append(row + ["Year"])
                 else:
-                    csv_data.append(row + [infile])
+                    csv_data.append(row + [infile.split(".")[0]])
             all_csv_data.append(csv_data)
         self.data = chain.from_iterable(all_csv_data)
