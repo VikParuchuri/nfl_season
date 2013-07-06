@@ -21,7 +21,7 @@ RUNNER = "percept.workflows.runners.SingleThreadedRunner"
 DATASTORE = "percept.workflows.datastores.FileStore"
 
 #Namespace to give the modules in the registry
-NAMESPACE = "nfl-season"
+NAMESPACE = "nfl_season"
 
 #What severity of error to log to file and console.  One of "DEBUG", "WARN", "INFO", "ERROR"
 LOG_LEVEL = "DEBUG"
@@ -33,8 +33,8 @@ if not os.path.exists(DATA_PATH):
 
 #Commands are discovered here, and tasks/inputs/formats are imported using only these modules
 INSTALLED_APPS = [
-    'nfl-season.inputs',
-    'nfl-season.formatters',
-    'nfl-season.tasks',
-    'nfl-season.workflows'
+    'nfl_season.inputs',
+    'nfl_season.formatters',
+    'nfl_season.tasks',
+    'nfl_season.workflows'
 ]
