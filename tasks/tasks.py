@@ -109,7 +109,7 @@ class GenerateSeasonFeatures(Task):
                 wins["Opp"] = wins["Loser/tie"]
                 wins = wins.sort(['Week'])
 
-                sel_data = pd.concat(losses, wins)
+                sel_data = pd.concat([losses, wins])
                 sel_data = sel_data.sort(['Week'])
                 total_losses = losses.shape[0]
                 total_wins = wins.shape[0]
@@ -122,29 +122,45 @@ class GenerateSeasonFeatures(Task):
                 total_away = away.shape
                 away = away.sort(['Week'])
 
-                home_stats = self.calc_stats(home)
-                away_stats = self.calc_stats(away)
-                win_stats = self.calc_stats(wins)
-                loss_stats = self.calc_stats(losses)
-
+                home_stats = self.calc_stats(home, "home")
+                away_stats = self.calc_stats(away, "away")
+                win_stats = self.calc_stats(wins, "wins")
+                loss_stats = self.calc_stats(losses, "losses")
+                team_df = self.make_opp_frame(sel_data, unique_teams, team)
                 meta_df = self.make_df([team, year, total_wins, total_losses, games_played, total_home, total_away], ["team", "year", "total_wins", "total_losses", "games_played", "total_home", "total_away"])
-                stat_list = pd.concat( [meta_df, home_stats, away_stats, win_stats, loss_stats], axis=1)
-
+                stat_list = pd.concat([meta_df, home_stats, away_stats, win_stats, loss_stats, team_df], axis=1)
+                year_stats.append(stat_list)
+        summary_frame = pd.concat(year_stats)
         return data
+
+    def make_opp_frame(self, df, all_team_names, team):
+        team_list = [0 for t in all_team_names]
+        for (i,t) in enumerate(all_team_names):
+            if t==team:
+                continue
+            elif t in list(df["Winner/tie"]):
+                team_list[i] = 2
+            elif t in list(df["Loser/tie"]):
+                team_list[i] = 1
+        team_df = self.make_df(team_list, all_team_names)
+        return team_df
 
     def make_df(self, datalist, labels, name_prefix=""):
         df = pd.DataFrame(datalist).T
-        labels = [name_prefix + "_" + l for l in labels]
+        if name_prefix!="":
+            labels = [name_prefix + "_" + l for l in labels]
+        labels = [l.replace(" ", "_").lower() for l in labels]
         df.columns = labels
         return df
 
-    def calc_stats(self, df):
-        yds = self.calc_indiv_stats(df, "TeamYds", "OppYds")
-        pts = self.calc_indiv_stats(df, "TeamPts", "OppPts")
-        pts_per_yard = pts[0]/yds[0]
-        opp_pts_per_yard = pts[1]/yds[1]
+    def calc_stats(self, df, name_prefix=""):
+        yds = self.calc_indiv_stats(df, "TeamYds", "OppYds", name_prefix + "_yds")
+        pts = self.calc_indiv_stats(df, "TeamPts", "OppPts", name_prefix + "_pts")
+        pts_per_yard = pts.iloc[0,0]/yds.iloc[0,0]
+        opp_pts_per_yard = pts.iloc[0,1]/yds.iloc[0,1]
         eff_ratio = opp_pts_per_yard/pts_per_yard
-        return yds + pts + [pts_per_yard, opp_pts_per_yard, eff_ratio]
+        meta_df = self.make_df([pts_per_yard, opp_pts_per_yard, eff_ratio], [ name_prefix + "_pts_per_yard", name_prefix + "_opp_pts_per_yard", name_prefix + "_eff_ratio"])
+        return pd.concat([yds, pts, meta_df], axis=1)
 
     def calc_indiv_stats(self, df, teamname, oppname, name_prefix = "", recursed = False):
         stat = np.mean(df[teamname])
@@ -152,9 +168,10 @@ class GenerateSeasonFeatures(Task):
         spread = opp_stat - stat
         ratio = opp_stat/stat
         stats = self.make_df([stat, opp_stat, spread, ratio], ["stat", "opp_stat", "spread", "ratio"], name_prefix)
-        if not recursed:
-            last_3 = self.calc_indiv_stats(df.iloc[-3:], teamname, oppname, name_prefix = "last_3", recursed= True)
-            last_5 = self.calc_indiv_stats(df.iloc[-5:], teamname, oppname, name_prefix = "last_5",recursed= True)
-            last_10 = self.calc_indiv_stats(df.iloc[-10:], teamname, oppname, name_prefix = "last_10",recursed= True)
+        if not recursed and df.shape[0]>0:
+            last_3 = self.calc_indiv_stats(df.iloc[-min([3, df.shape[0]]):], teamname, oppname, name_prefix = name_prefix + "_last_3", recursed= True)
+            last_5 = self.calc_indiv_stats(df.iloc[-min([5, df.shape[0]]):], teamname, oppname, name_prefix = name_prefix + "_last_5",recursed= True)
+            last_10 = self.calc_indiv_stats(df.iloc[-min([10, df.shape[0]]):], teamname, oppname, name_prefix = name_prefix + "_last_10",recursed= True)
             stats = pd.concat([stats, last_3 , last_5, last_10], axis=1)
         return stats
+
