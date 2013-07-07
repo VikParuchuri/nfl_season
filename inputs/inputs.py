@@ -27,7 +27,7 @@ class NFLInput(BaseInput):
         directory is a path to a directory with multiple csv files
         """
 
-        datafiles = [ f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory,f))]
+        datafiles = [ f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory,f)) and f.endswith(".csv")]
         all_csv_data = []
         for infile in datafiles:
             stream = open(os.path.join(directory, infile))

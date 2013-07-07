@@ -32,7 +32,7 @@ class NFLFormatter(JSONFormat):
             else:
                 data_row = {}
                 for (j,h) in enumerate(headers):
-                    if j in row:
+                    if j<len(row):
                         data_row.update({h : row[j]})
                     else:
                         data_row.update({h : 0})
