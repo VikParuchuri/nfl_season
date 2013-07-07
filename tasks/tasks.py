@@ -5,6 +5,7 @@ from percept.utils.models import RegistryCategories, get_namespace
 import logging
 import numpy as np
 import calendar
+import pandas as pd
 
 log = logging.getLogger(__name__)
 
@@ -62,5 +63,58 @@ class CleanupNFLCSV(Task):
         for c in int_columns:
             data.iloc[:,c] = data.iloc[:,c].astype(int)
 
+        return data
+
+class GenerateSeasonFeatures(Task):
+    data = Complex()
+
+    data_format = NFLFormats.dataframe
+
+    category = RegistryCategories.preprocessors
+    namespace = get_namespace(__module__)
+
+    help_text = "Convert from direct nfl data to features."
+
+    def train(self, data, target, **kwargs):
+        """
+        Used in the training phase.  Override.
+        """
+        self.data = self.predict(data)
+
+    def predict(self, data, **kwargs):
+        """
+        Used in the predict phase, after training.  Override
+        """
+
+        unique_teams = list(set(list(set(data['Winner/tie'])) + list(set(data['Loser/tie']))))
+        unique_years = list(set(data['Year']))
+
+        year_stats = []
+        for year in unique_years:
+            for team in unique_teams:
+                sel_data = data.loc[((data["Year"]==year) & ((data["Winner/tie"] == team) | (data["Loser/tie"] == team))),:]
+                losses = sel_data[(sel_data["Loser/tie"] == team)]
+                losses["TeamYds"] = losses["YdsL"]
+                losses["TeamPts"] = losses["PtsL"]
+                losses["OppPts"] = losses["PtsW"]
+                losses["OppYds"] = losses["YdsW"]
+
+                wins =  sel_data[(sel_data["Winner/tie"] == team)]
+                wins["TeamYds"] = wins["YdsW"]
+                wins["TeamPts"] = wins["PtsW"]
+                wins["OppPts"] = wins["PtsL"]
+                wins["OppYds"] = wins["YdsL"]
+
+                sel_data = pd.concat(losses, wins)
+                total_losses = losses.shape[0]
+                total_wins = wins.shape[0]
+                games_played = sel_data.shape[0]
+
+                home = pd.concat([losses[(losses["Home"] == 1)],wins[(wins["Home"] == 0)]])
+                total_home = home.shape[0]
+                away = pd.concat([wins[(wins["Home"] == 1)],losses[(losses["Home"] == 0)]])
+                total_away = away.shape
+
+                
         return data
 
