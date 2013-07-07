@@ -131,7 +131,7 @@ class GenerateSeasonFeatures(Task):
                 stat_list = pd.concat([meta_df, home_stats, away_stats, win_stats, loss_stats, team_df], axis=1)
                 year_stats.append(stat_list)
         summary_frame = pd.concat(year_stats)
-        return data
+        return summary_frame
 
     def make_opp_frame(self, df, all_team_names, team):
         team_list = [0 for t in all_team_names]
