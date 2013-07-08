@@ -350,7 +350,7 @@ class CrossValidate(Task):
         nfolds = kwargs.get('nfolds', 3)
         algo = kwargs.get('algo')
         seed = kwargs.get('seed', 1)
-        non_predictors = [i.replace(" ", "_").lower() for i in list(set(data['team']))] + ["team", "nn"]
+        non_predictors = [i.replace(" ", "_").lower() for i in list(set(data['team']))] + ["team", "next_year_wins"]
         fold_length = int(math.floor(data_len/nfolds))
         folds = []
         data_seq = list(xrange(0,data_len))
