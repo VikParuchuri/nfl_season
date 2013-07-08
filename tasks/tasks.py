@@ -323,7 +323,7 @@ class RandomForestTrain(SVMTrain):
     category = RegistryCategories.algorithms
     namespace = get_namespace(__module__)
     algorithm = RandomForestRegressor
-    args = {'n_estimators' : 300, 'min_samples_leaf' : 1}
+    args = {'n_estimators' : 300, 'min_samples_leaf' : 1, 'compute_importances' : True}
 
     help_text = "Train and predict with Random Forest."
 
@@ -337,20 +337,16 @@ class CrossValidate(Task):
 
     category = RegistryCategories.preprocessors
     namespace = get_namespace(__module__)
-    args = {'nfolds' : 3, 'algo' : RandomForestTrain}
+    args = {'nfolds' : 3, 'algo' : RandomForestTrain, 'compute_importances' : True}
 
     help_text = "Convert from direct nfl data to features."
 
-    def train(self, data, target, **kwargs):
-        """
-        Used in the training phase.  Override.
-        """
-        data_len = data.shape[0]
-        counter = 0
+    def cross_validate(self, data, non_predictors, **kwargs):
         nfolds = kwargs.get('nfolds', 3)
         algo = kwargs.get('algo')
         seed = kwargs.get('seed', 1)
-        non_predictors = [i.replace(" ", "_").lower() for i in list(set(data['team']))] + ["team", "next_year_wins"]
+        data_len = data.shape[0]
+        counter = 0
         fold_length = int(math.floor(data_len/nfolds))
         folds = []
         data_seq = list(xrange(0,data_len))
@@ -378,6 +374,17 @@ class CrossValidate(Task):
             predict_data = predict_data[[l for l in list(predict_data.columns) if l not in non_predictors]]
             alg.train(train_data,target)
             results.append(alg.predict(predict_data))
+        return results, folds
+
+    def train(self, data, target, **kwargs):
+        """
+        Used in the training phase.  Override.
+        """
+        non_predictors = [i.replace(" ", "_").lower() for i in list(set(data['team']))] + ["team", "next_year_wins"]
+        results, folds = self.cross_validate(data, non_predictors, **kwargs)
+        self.gather_results(results, folds, data)
+
+    def gather_results(self, results, folds, data):
         full_results = list(chain.from_iterable(results))
         full_indices = list(chain.from_iterable(folds))
         partial_result_df = make_df([full_results, full_indices], ["result", "index"])
@@ -398,5 +405,42 @@ class CrossValidate(Task):
         """
 
         pass
+
+class SequentialValidate(CrossValidate):
+    args = CrossValidate.args.update({'min_years' : 4})
+    def sequential_validate(self, data, non_predictors, **kwargs):
+        algo = kwargs.get('algo')
+        seed = kwargs.get('seed', 1)
+        min_years = kwargs.get('min_years', 4)
+        random.seed(seed)
+
+        min_year = np.min(data['year'])
+        start_year = min_year + min_years
+
+        end_year = np.max(data['year'])
+        results = []
+        predict_rows = []
+        for year in xrange(start_year, end_year):
+            train_data = data[data['year']< year]
+            predict_data = data[data['year'] == year]
+
+            alg = algo()
+
+            target = train_data['next_year_wins']
+            train_data = train_data[[l for l in list(train_data.columns) if l not in non_predictors]]
+            predict_data = predict_data[[l for l in list(predict_data.columns) if l not in non_predictors]]
+
+            alg.train(train_data,target)
+            results.append(alg.predict(predict_data))
+            predict_rows.append(predict_data)
+        predict_frame = pd.concat(predict_rows)
+        predict_frame.index = range(predict_frame.shape[0])
+        full_results = list(chain.from_iterable(results))
+        predict_frame['results'] = full_results
+        result_df = predict_frame[['next_year_wins', 'team', 'year', 'total_wins', 'result']]
+        self.results = result_df
+        self.calc_error(result_df)
+
+
 
 
