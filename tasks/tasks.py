@@ -21,6 +21,7 @@ def make_df(datalist, labels, name_prefix=""):
         labels = [name_prefix + "_" + l for l in labels]
     labels = [l.replace(" ", "_").lower() for l in labels]
     df.columns = labels
+    df.index = range(df.shape[0])
     return df
 
 class CleanupNFLCSV(Task):
@@ -296,7 +297,7 @@ class CrossValidate(Task):
         algo = kwargs.get('algo')
         seed = kwargs.get('seed', 1)
         non_predictors = [i.replace(" ", "_").lower() for i in list(set(data['team']))] + ["next_year_wins"]
-        fold_length = math.floor(data_len/nfolds)
+        fold_length = int(math.floor(data_len/nfolds))
         folds = []
         data_seq = list(xrange(0,data_len))
         random.seed(seed)
@@ -312,14 +313,17 @@ class CrossValidate(Task):
             counter += fold_length
 
         results = []
+        data.index = range(data.shape[0])
         for (i,fold) in enumerate(folds):
-            predict_data = data.iloc[fold]
-            out_indices = chain.from_iterable(folds[:i] + folds[(i + 1):])
-            train_data = data.iloc[out_indices]
+            predict_data = data.iloc[fold,:]
+            out_indices = list(chain.from_iterable(folds[:i] + folds[(i + 1):]))
+            train_data = data.iloc[out_indices,:]
             alg = algo()
             target = train_data['next_year_wins']
-            data = train_data[[l for l in list(train_data.columns) if l not in non_predictors]]
-            results.append(alg.train(data,target))
+            train_data = train_data[[l for l in list(train_data.columns) if l not in non_predictors]]
+            predict_data = predict_data[[l for l in list(predict_data.columns) if l not in non_predictors]]
+            alg.train(train_data,target)
+            results.append(alg.predict(predict_data))
         full_results = chain.from_iterable(results)
         full_indices = chain.from_iterable(folds)
         result_df = make_df([full_results, full_indices, data[['next_year_wins', 'team', 'year']]], ["result", "index"])
