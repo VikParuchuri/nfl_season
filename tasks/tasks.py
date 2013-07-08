@@ -12,6 +12,9 @@ from sklearn.ensemble import RandomForestRegressor
 import math
 import random
 from itertools import chain
+from percept.tests.framework import Tester
+import os
+from percept.conf.base import settings
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +27,48 @@ def make_df(datalist, labels, name_prefix=""):
     df.index = range(df.shape[0])
     return df
 
+class CleanupNFLCSVTester(Tester):
+    test_case_format = {'stream' : basestring, 'dataformat' : basestring}
+
+    def preprocess_input(self, **kwargs):
+        stream = kwargs.get('stream')
+        dataformat = kwargs.get('dataformat')
+        inst = self.cls()
+        output_format = inst.data_format
+        data = self.read_and_reformat(output_format, stream, dataformat)
+        return data, inst
+
+    def test(self, **kwargs):
+        super(CleanupNFLCSVTester, self).test(**kwargs)
+        data, inst = self.preprocess_input(**kwargs)
+
+        inst.train(data, "")
+        assert type(inst.data) == pd.core.frame.DataFrame
+
+class GenerateSeasonFeaturesTester(CleanupNFLCSVTester):
+    def test(self, **kwargs):
+        data, inst = self.preprocess_input(**kwargs)
+        cleanup_nfl_csv = CleanupNFLCSV()
+        cleanup_nfl_csv.train(data,"")
+        data = cleanup_nfl_csv.data
+        inst.train(data, "")
+        assert type(inst.data) == pd.core.frame.DataFrame
+
+class GenerateSOSFeaturesTester(CleanupNFLCSVTester):
+    def test(self, **kwargs):
+        data, inst = self.preprocess_input(**kwargs)
+        cleanup_nfl_csv = CleanupNFLCSV()
+        cleanup_nfl_csv.train(data,"")
+        data = cleanup_nfl_csv.data
+        generate_season_features = GenerateSeasonFeatures()
+        generate_season_features.train(data,"")
+        data = generate_season_features.data
+        inst.train(data, "")
+        assert type(inst.data) == pd.core.frame.DataFrame
+
 class CleanupNFLCSV(Task):
+    tester = CleanupNFLCSVTester
+    test_cases = [{'stream' : os.path.join(settings.PROJECT_PATH, "data"), 'dataformat' : NFLFormats.multicsv}]
     data = Complex()
 
     data_format = NFLFormats.dataframe
@@ -81,6 +125,8 @@ class CleanupNFLCSV(Task):
         return data
 
 class GenerateSeasonFeatures(Task):
+    tester = GenerateSeasonFeaturesTester
+    test_cases = [{'stream' : os.path.join(settings.PROJECT_PATH, "data"), 'dataformat' : NFLFormats.multicsv}]
     data = Complex()
 
     data_format = NFLFormats.dataframe
@@ -185,6 +231,8 @@ class GenerateSeasonFeatures(Task):
         return stats
 
 class GenerateSOSFeatures(Task):
+    tester = GenerateSOSFeaturesTester
+    test_cases = [{'stream' : os.path.join(settings.PROJECT_PATH, "data"), 'dataformat' : NFLFormats.multicsv}]
     data = Complex()
     data_format = NFLFormats.dataframe
 
@@ -322,8 +370,8 @@ class CrossValidate(Task):
             target = train_data['next_year_wins']
             train_data = train_data[[l for l in list(train_data.columns) if l not in non_predictors]]
             predict_data = predict_data[[l for l in list(predict_data.columns) if l not in non_predictors]]
-            alg.train(train_data,target)
-            results.append(alg.predict(predict_data))
+            alg.train(np.asarray(train_data),np.asarray(target))
+            results.append(alg.predict(np.asarray(predict_data)))
         full_results = chain.from_iterable(results)
         full_indices = chain.from_iterable(folds)
         result_df = make_df([full_results, full_indices, data[['next_year_wins', 'team', 'year']]], ["result", "index"])
