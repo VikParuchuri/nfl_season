@@ -280,7 +280,7 @@ class GenerateSOSFeatures(Task):
             team = sel_data['team']
             year = sel_data['year']
             next_year = year+1
-            next_year_wins = data.loc[(data['team']==team) & (data['year']==year), 'total_wins']
+            next_year_wins = data.loc[(data['team']==team) & (data['year']==year+1), 'total_wins']
             if next_year_wins.shape[0] == 0:
                 next_year_wins = sel_data['total_wins']
             opp_list = []
