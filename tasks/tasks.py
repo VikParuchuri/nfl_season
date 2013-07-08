@@ -1,12 +1,17 @@
 from __future__ import division
 from percept.tasks.base import Task
-from percept.fields.base import Complex, List
+from percept.tasks.train import SVMTrain
+from percept.fields.base import Complex, List, Dict
 from inputs.inputs import NFLFormats
 from percept.utils.models import RegistryCategories, get_namespace
 import logging
 import numpy as np
 import calendar
 import pandas as pd
+from sklearn.ensemble import RandomForestRegressor
+import math
+import random
+from itertools import chain
 
 log = logging.getLogger(__name__)
 
@@ -249,5 +254,68 @@ class GenerateSOSFeatures(Task):
         df = make_df([opp_total_wins, opp_total_losses, opp_home_wins, opp_road_wins], ["opp_total_wins", "opp_total_losses", "opp_home_wins", "opp_road_wins"], name_prefix= name_prefix)
         return df
 
+class CrossValidate(Task):
+    data = Complex()
+    results = Dict()
+
+    data_format = NFLFormats.dataframe
+
+    category = RegistryCategories.preprocessors
+    namespace = get_namespace(__module__)
+    args = {'nfolds' : 3, 'algo' : RandomForestTrain}
+
+    help_text = "Convert from direct nfl data to features."
+
+    def train(self, data, target, **kwargs):
+        """
+        Used in the training phase.  Override.
+        """
+        data_len = data.shape[0]
+        counter = 0
+        nfolds = kwargs.get('nfolds', 3)
+        algo = kwargs.get('algo')
+        seed = kwargs.get('seed', 1)
+        fold_length = math.floor(data_len/nfolds)
+        folds = []
+        data_seq = list(xrange(0,data_len))
+        random.seed(seed)
+        random.shuffle(data_seq)
+
+        for fold in xrange(0, nfolds):
+            start = counter
+
+            end = counter + fold_length
+            if fold == (nfolds-1):
+                end = data_len
+            folds.append(data_seq[start:end])
+            counter += fold_length
+
+        results = []
+        for (i,fold) in enumerate(folds):
+            predict_data = data.iloc[fold]
+            out_indices = chain.from_iterable(folds[:i] + folds[(i + 1):])
+            train_data = data.iloc[out_indices]
+            alg = algo()
+            
+    def predict(self, data, **kwargs):
+        """
+        Used in the predict phase, after training.  Override
+        """
+
+        pass
+
+
+class RandomForestTrain(SVMTrain):
+    """
+    A class to train a random forest
+    """
+    colnames = List()
+    clf = Complex()
+    category = RegistryCategories.algorithms
+    namespace = get_namespace(__module__)
+    algorithm = RandomForestRegressor
+    args = {'n_estimators' : 300, 'min_samples_leaf' : 1}
+
+    help_text = "Train and predict with Random Forest."
 
 
