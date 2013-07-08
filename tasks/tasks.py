@@ -337,7 +337,7 @@ class CrossValidate(Task):
 
     category = RegistryCategories.preprocessors
     namespace = get_namespace(__module__)
-    args = {'nfolds' : 3, 'algo' : RandomForestTrain, 'compute_importances' : True}
+    args = {'nfolds' : 3, 'algo' : RandomForestTrain}
 
     help_text = "Convert from direct nfl data to features."
 
@@ -407,7 +407,7 @@ class CrossValidate(Task):
         pass
 
 class SequentialValidate(CrossValidate):
-    args = CrossValidate.args.update({'min_years' : 4})
+    args = {'min_years' : 4, 'algo' : RandomForestTrain}
     def sequential_validate(self, data, non_predictors, **kwargs):
         algo = kwargs.get('algo')
         seed = kwargs.get('seed', 1)
@@ -422,24 +422,31 @@ class SequentialValidate(CrossValidate):
         predict_rows = []
         for year in xrange(start_year, end_year):
             train_data = data[data['year']< year]
-            predict_data = data[data['year'] == year]
+            predict_full = data[data['year'] == year]
 
             alg = algo()
 
             target = train_data['next_year_wins']
             train_data = train_data[[l for l in list(train_data.columns) if l not in non_predictors]]
-            predict_data = predict_data[[l for l in list(predict_data.columns) if l not in non_predictors]]
+            predict_data = predict_full[[l for l in list(predict_full.columns) if l not in non_predictors]]
 
             alg.train(train_data,target)
             results.append(alg.predict(predict_data))
-            predict_rows.append(predict_data)
+            predict_rows.append(predict_full)
         predict_frame = pd.concat(predict_rows)
         predict_frame.index = range(predict_frame.shape[0])
         full_results = list(chain.from_iterable(results))
-        predict_frame['results'] = full_results
+        predict_frame['result'] = full_results
         result_df = predict_frame[['next_year_wins', 'team', 'year', 'total_wins', 'result']]
         self.results = result_df
         self.calc_error(result_df)
+
+    def train(self, data, target, **kwargs):
+        """
+        Used in the training phase.  Override.
+        """
+        non_predictors = [i.replace(" ", "_").lower() for i in list(set(data['team']))] + ["team", "next_year_wins"]
+        self.sequential_validate(data, non_predictors, **kwargs)
 
 
 
