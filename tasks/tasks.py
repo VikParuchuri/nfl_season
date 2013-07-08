@@ -301,6 +301,8 @@ class GenerateSOSFeatures(Task):
             sos_data.append(sos_row)
         sos_frame = pd.concat(sos_data)
         full_data = pd.concat([data, sos_frame], axis=1)
+        full_data.replace([np.inf, -np.inf], -2, inplace=True)
+        full_data.replace([np.nan], -1, inplace=True)
         return full_data
 
     def calc_opp_stats(self, opp_list, name_prefix = ""):
@@ -373,12 +375,12 @@ class CrossValidate(Task):
             target = train_data['next_year_wins']
             train_data = train_data[[l for l in list(train_data.columns) if l not in non_predictors]]
             predict_data = predict_data[[l for l in list(predict_data.columns) if l not in non_predictors]]
-            log.info(train_data)
-            alg.train(np.asarray(train_data),np.asarray(target))
-            results.append(alg.predict(np.asarray(predict_data)))
-        full_results = chain.from_iterable(results)
-        full_indices = chain.from_iterable(folds)
-        result_df = make_df([full_results, full_indices, data[['next_year_wins', 'team', 'year']]], ["result", "index"])
+            alg.train(train_data,target)
+            results.append(alg.predict(predict_data))
+        full_results = list(chain.from_iterable(results))
+        full_indices = list(chain.from_iterable(folds))
+        partial_result_df = make_df([full_results, full_indices], ["result", "index"])
+        result_df = pd.concat([partial_result_df, data[['next_year_wins', 'team', 'year']]], axis=1)
         result_df = result_df.sort(["index"])
         self.results = result_df
 
