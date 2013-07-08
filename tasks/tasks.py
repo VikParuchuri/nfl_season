@@ -148,6 +148,7 @@ class GenerateSeasonFeatures(Task):
         """
 
         unique_teams = list(set(list(set(data['Winner/tie'])) + list(set(data['Loser/tie']))))
+        team_dict = {v:k for (k,v) in enumerate(list(set(list(set(data['Winner/tie'])) + list(set(data['Loser/tie'])))))}
         unique_years = list(set(data['Year']))
 
         year_stats = []
@@ -182,7 +183,7 @@ class GenerateSeasonFeatures(Task):
                 home = home.sort(['Week'])
                 total_home = home.shape[0]
                 away = pd.concat([wins[(wins["Home"] == 1)],losses[(losses["Home"] == 0)]])
-                total_away = away.shape
+                total_away = away.shape[0]
                 away = away.sort(['Week'])
 
                 home_stats = self.calc_stats(home, "home")
@@ -190,7 +191,9 @@ class GenerateSeasonFeatures(Task):
                 win_stats = self.calc_stats(wins, "wins")
                 loss_stats = self.calc_stats(losses, "losses")
                 team_df = self.make_opp_frame(sel_data, unique_teams, team)
-                meta_df = make_df([team.replace(" ", " ").lower(), year, total_wins, total_losses, games_played, total_home, total_away, home_wins, road_wins], ["team", "year", "total_wins", "total_losses", "games_played", "total_home", "total_away", "home_wins", "road_wins"])
+                team_num = team_dict[team]
+
+                meta_df = make_df([team.replace(" ", " ").lower(), year, total_wins, total_losses, games_played, total_home, total_away, home_wins, road_wins, team_num], ["team", "year", "total_wins", "total_losses", "games_played", "total_home", "total_away", "home_wins", "road_wins", "team_num"])
                 stat_list = pd.concat([meta_df, home_stats, away_stats, win_stats, loss_stats, team_df], axis=1)
                 year_stats.append(stat_list)
         summary_frame = pd.concat(year_stats)
@@ -344,7 +347,7 @@ class CrossValidate(Task):
         nfolds = kwargs.get('nfolds', 3)
         algo = kwargs.get('algo')
         seed = kwargs.get('seed', 1)
-        non_predictors = [i.replace(" ", "_").lower() for i in list(set(data['team']))] + ["next_year_wins"]
+        non_predictors = [i.replace(" ", "_").lower() for i in list(set(data['team']))] + ["next_year_wins", "team"]
         fold_length = int(math.floor(data_len/nfolds))
         folds = []
         data_seq = list(xrange(0,data_len))
@@ -370,6 +373,7 @@ class CrossValidate(Task):
             target = train_data['next_year_wins']
             train_data = train_data[[l for l in list(train_data.columns) if l not in non_predictors]]
             predict_data = predict_data[[l for l in list(predict_data.columns) if l not in non_predictors]]
+            log.info(train_data)
             alg.train(np.asarray(train_data),np.asarray(target))
             results.append(alg.predict(np.asarray(predict_data)))
         full_results = chain.from_iterable(results)
