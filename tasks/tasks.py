@@ -1,3 +1,4 @@
+from __future__ import division
 from percept.tasks.base import Task
 from percept.fields.base import Complex, List
 from inputs.inputs import NFLFormats
@@ -8,6 +9,14 @@ import calendar
 import pandas as pd
 
 log = logging.getLogger(__name__)
+
+def make_df(datalist, labels, name_prefix=""):
+    df = pd.DataFrame(datalist).T
+    if name_prefix!="":
+        labels = [name_prefix + "_" + l for l in labels]
+    labels = [l.replace(" ", "_").lower() for l in labels]
+    df.columns = labels
+    return df
 
 class CleanupNFLCSV(Task):
     data = Complex()
@@ -73,7 +82,7 @@ class GenerateSeasonFeatures(Task):
     category = RegistryCategories.preprocessors
     namespace = get_namespace(__module__)
 
-    help_text = "Convert from direct nfl data to features."
+    help_text = "Generate season features."
 
     def train(self, data, target, **kwargs):
         """
@@ -114,6 +123,8 @@ class GenerateSeasonFeatures(Task):
                 total_losses = losses.shape[0]
                 total_wins = wins.shape[0]
                 games_played = sel_data.shape[0]
+                home_wins = wins[(wins["Home"] == 0)].shape[0]
+                road_wins = wins[(wins["Home"] == 1)].shape[0]
 
                 home = pd.concat([losses[(losses["Home"] == 1)],wins[(wins["Home"] == 0)]])
                 home = home.sort(['Week'])
@@ -127,7 +138,7 @@ class GenerateSeasonFeatures(Task):
                 win_stats = self.calc_stats(wins, "wins")
                 loss_stats = self.calc_stats(losses, "losses")
                 team_df = self.make_opp_frame(sel_data, unique_teams, team)
-                meta_df = self.make_df([team, year, total_wins, total_losses, games_played, total_home, total_away], ["team", "year", "total_wins", "total_losses", "games_played", "total_home", "total_away"])
+                meta_df = make_df([team.replace(" ", " ").lower(), year, total_wins, total_losses, games_played, total_home, total_away, home_wins, road_wins], ["team", "year", "total_wins", "total_losses", "games_played", "total_home", "total_away", "home_wins", "road_wins"])
                 stat_list = pd.concat([meta_df, home_stats, away_stats, win_stats, loss_stats, team_df], axis=1)
                 year_stats.append(stat_list)
         summary_frame = pd.concat(year_stats)
@@ -142,16 +153,8 @@ class GenerateSeasonFeatures(Task):
                 team_list[i] = 2
             elif t in list(df["Loser/tie"]):
                 team_list[i] = 1
-        team_df = self.make_df(team_list, all_team_names)
+        team_df = make_df(team_list, all_team_names)
         return team_df
-
-    def make_df(self, datalist, labels, name_prefix=""):
-        df = pd.DataFrame(datalist).T
-        if name_prefix!="":
-            labels = [name_prefix + "_" + l for l in labels]
-        labels = [l.replace(" ", "_").lower() for l in labels]
-        df.columns = labels
-        return df
 
     def calc_stats(self, df, name_prefix=""):
         yds = self.calc_indiv_stats(df, "TeamYds", "OppYds", name_prefix + "_yds")
@@ -159,7 +162,7 @@ class GenerateSeasonFeatures(Task):
         pts_per_yard = pts.iloc[0,0]/yds.iloc[0,0]
         opp_pts_per_yard = pts.iloc[0,1]/yds.iloc[0,1]
         eff_ratio = opp_pts_per_yard/pts_per_yard
-        meta_df = self.make_df([pts_per_yard, opp_pts_per_yard, eff_ratio], [ name_prefix + "_pts_per_yard", name_prefix + "_opp_pts_per_yard", name_prefix + "_eff_ratio"])
+        meta_df = make_df([pts_per_yard, opp_pts_per_yard, eff_ratio], [ name_prefix + "_pts_per_yard", name_prefix + "_opp_pts_per_yard", name_prefix + "_eff_ratio"])
         return pd.concat([yds, pts, meta_df], axis=1)
 
     def calc_indiv_stats(self, df, teamname, oppname, name_prefix = "", recursed = False):
@@ -167,11 +170,80 @@ class GenerateSeasonFeatures(Task):
         opp_stat = np.mean(df[oppname])
         spread = opp_stat - stat
         ratio = opp_stat/stat
-        stats = self.make_df([stat, opp_stat, spread, ratio], ["stat", "opp_stat", "spread", "ratio"], name_prefix)
+        stats = make_df([stat, opp_stat, spread, ratio], ["stat", "opp_stat", "spread", "ratio"], name_prefix)
         if not recursed and df.shape[0]>0:
             last_3 = self.calc_indiv_stats(df.iloc[-min([3, df.shape[0]]):], teamname, oppname, name_prefix = name_prefix + "_last_3", recursed= True)
             last_5 = self.calc_indiv_stats(df.iloc[-min([5, df.shape[0]]):], teamname, oppname, name_prefix = name_prefix + "_last_5",recursed= True)
             last_10 = self.calc_indiv_stats(df.iloc[-min([10, df.shape[0]]):], teamname, oppname, name_prefix = name_prefix + "_last_10",recursed= True)
             stats = pd.concat([stats, last_3 , last_5, last_10], axis=1)
         return stats
+
+class GenerateSOSFeatures(Task):
+    data = Complex()
+    data_format = NFLFormats.dataframe
+
+    category = RegistryCategories.preprocessors
+    namespace = get_namespace(__module__)
+
+    help_text = "Generate strength of schedule features."
+
+    def train(self, data, target, **kwargs):
+        """
+        Used in the training phase.  Override.
+        """
+        self.data = self.predict(data)
+
+    def list_mean(self, l):
+        return sum(l)/len(l)
+
+    def predict(self, data, **kwargs):
+        """
+        Used in the predict phase, after training.  Override
+        """
+        unique_teams = [i.replace(" ", "_").lower() for i in list(set(data['team']))]
+        sos = {}
+        unique_years = list(set(data['year']))
+        for year in unique_years:
+            for team in unique_teams:
+                sel_data = data.loc[(data["year"]==year) & (data["team"] == team),:]
+                total_wins = sel_data['total_wins'][0]
+                total_losses = sel_data['total_losses'][0]
+                home_wins = sel_data['home_wins'][0]
+                home_losses = sel_data['home_losses'][0]
+                sos.update({team : [total_wins, total_losses, home_wins, home_losses]})
+
+        sos_data = []
+        row_count = data.shape[0]
+        for i in xrange(0, row_count):
+            sel_data = data.iloc[i,:]
+            team = sel_data['team'][0]
+            opp_list = []
+            win_list = []
+            loss_list = []
+            for opp in unique_teams:
+                if team.replace(" ", "_").lower()!=opp and sel_data[opp][0] in [1,2]:
+                    opp_list.append(sos[opp])
+                    if sel_data[opp][0]==1:
+                        win_list.append(sos[opp])
+                    else:
+                        loss_list.append(sos[opp])
+            opp_stats = self.calc_opp_stats(opp_list, "opp")
+            win_stats = self.calc_opp_stats(opp_list, "opp_win")
+            loss_stats = self.calc_opp_stats(opp_list, "opp_loss")
+            sos_row = pd.concat([opp_stats, win_stats, loss_stats], axis=1)
+            sos_data.append(sos_row)
+        sos_frame = pd.concat(sos_data)
+        full_data = pd.concat([data, sos_data], axis=1)
+        return full_data
+
+    def calc_opp_stats(self, opp_list, name_prefix = ""):
+        opp_total_wins = self.list_mean([o[0] for o in opp_list])
+        opp_total_losses = self.list_mean([o[1] for o in opp_list])
+        opp_home_wins = self.list_mean([o[2] for o in opp_list])
+        opp_road_wins = self.list_mean([o[3] for o in opp_list])
+
+        df = make_df([opp_total_wins, opp_total_losses, opp_home_wins, opp_road_wins], ["opp_total_wins", "opp_total_losses", "opp_home_wins", "opp_road_wins"], name_prefix= name_prefix)
+        return df
+
+
 
