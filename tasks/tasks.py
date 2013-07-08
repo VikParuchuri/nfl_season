@@ -194,7 +194,10 @@ class GenerateSOSFeatures(Task):
         self.data = self.predict(data)
 
     def list_mean(self, l):
-        return sum(l)/len(l)
+        if len(l)>0:
+            return sum(l)/len(l)
+        else:
+            return -1
 
     def predict(self, data, **kwargs):
         """
@@ -206,11 +209,12 @@ class GenerateSOSFeatures(Task):
         for year in unique_years:
             for team in unique_teams:
                 sel_data = data.loc[(data["year"]==year) & (data["team"] == team),:]
-                total_wins = sel_data['total_wins'][0]
-                total_losses = sel_data['total_losses'][0]
-                home_wins = sel_data['home_wins'][0]
-                home_losses = sel_data['home_losses'][0]
-                sos.update({team : [total_wins, total_losses, home_wins, home_losses]})
+                if sel_data.shape[0]>0:
+                    total_wins = sel_data['total_wins'][0]
+                    total_losses = sel_data['total_losses'][0]
+                    home_wins = sel_data['home_wins'][0]
+                    home_losses = sel_data['home_losses'][0]
+                    sos.update({team : [total_wins, total_losses, home_wins, home_losses]})
 
         sos_data = []
         row_count = data.shape[0]
@@ -221,9 +225,9 @@ class GenerateSOSFeatures(Task):
             win_list = []
             loss_list = []
             for opp in unique_teams:
-                if team.replace(" ", "_").lower()!=opp and sel_data[opp][0] in [1,2]:
+                if team.replace(" ", "_").lower()!=opp and sel_data[opp] in [1,2] and opp in sos:
                     opp_list.append(sos[opp])
-                    if sel_data[opp][0]==1:
+                    if sel_data[opp]==1:
                         win_list.append(sos[opp])
                     else:
                         loss_list.append(sos[opp])
@@ -233,7 +237,7 @@ class GenerateSOSFeatures(Task):
             sos_row = pd.concat([opp_stats, win_stats, loss_stats], axis=1)
             sos_data.append(sos_row)
         sos_frame = pd.concat(sos_data)
-        full_data = pd.concat([data, sos_data], axis=1)
+        full_data = pd.concat([data, sos_frame], axis=1)
         return full_data
 
     def calc_opp_stats(self, opp_list, name_prefix = ""):
