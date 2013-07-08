@@ -225,7 +225,12 @@ class GenerateSOSFeatures(Task):
         row_count = data.shape[0]
         for i in xrange(0, row_count):
             sel_data = data.iloc[i,:]
-            team = sel_data['team'][0]
+            team = sel_data['team']
+            year = sel_data['year']
+            next_year = year+1
+            next_year_wins = data.loc[(data['team']==team) & (data['year']==year), 'total_wins']
+            if next_year_wins.shape[0] == 0:
+                next_year_wins = sel_data['total_wins']
             opp_list = []
             win_list = []
             loss_list = []
@@ -239,7 +244,8 @@ class GenerateSOSFeatures(Task):
             opp_stats = self.calc_opp_stats(opp_list, "opp")
             win_stats = self.calc_opp_stats(opp_list, "opp_win")
             loss_stats = self.calc_opp_stats(opp_list, "opp_loss")
-            sos_row = pd.concat([opp_stats, win_stats, loss_stats], axis=1)
+            target_frame = make_df([next_year_wins], ["next_year_wins"])
+            sos_row = pd.concat([opp_stats, win_stats, loss_stats, target_frame], axis=1)
             sos_data.append(sos_row)
         sos_frame = pd.concat(sos_data)
         full_data = pd.concat([data, sos_frame], axis=1)
@@ -253,6 +259,20 @@ class GenerateSOSFeatures(Task):
 
         df = make_df([opp_total_wins, opp_total_losses, opp_home_wins, opp_road_wins], ["opp_total_wins", "opp_total_losses", "opp_home_wins", "opp_road_wins"], name_prefix= name_prefix)
         return df
+
+class RandomForestTrain(SVMTrain):
+    """
+    A class to train a random forest
+    """
+    colnames = List()
+    clf = Complex()
+    category = RegistryCategories.algorithms
+    namespace = get_namespace(__module__)
+    algorithm = RandomForestRegressor
+    args = {'n_estimators' : 300, 'min_samples_leaf' : 1}
+
+    help_text = "Train and predict with Random Forest."
+
 
 class CrossValidate(Task):
     data = Complex()
@@ -275,6 +295,7 @@ class CrossValidate(Task):
         nfolds = kwargs.get('nfolds', 3)
         algo = kwargs.get('algo')
         seed = kwargs.get('seed', 1)
+        non_predictors = [i.replace(" ", "_").lower() for i in list(set(data['team']))] + ["next_year_wins"]
         fold_length = math.floor(data_len/nfolds)
         folds = []
         data_seq = list(xrange(0,data_len))
@@ -296,26 +317,20 @@ class CrossValidate(Task):
             out_indices = chain.from_iterable(folds[:i] + folds[(i + 1):])
             train_data = data.iloc[out_indices]
             alg = algo()
-            
+            target = train_data['next_year_wins']
+            data = train_data[[l for l in list(train_data.columns) if l not in non_predictors]]
+            results.append(alg.train(data,target))
+        full_results = chain.from_iterable(results)
+        full_indices = chain.from_iterable(folds)
+        result_df = make_df([full_results, full_indices, data[['next_year_wins', 'team', 'year']]], ["result", "index"])
+        result_df = result_df.sort(["index"])
+        self.results = result_df
+
     def predict(self, data, **kwargs):
         """
         Used in the predict phase, after training.  Override
         """
 
         pass
-
-
-class RandomForestTrain(SVMTrain):
-    """
-    A class to train a random forest
-    """
-    colnames = List()
-    clf = Complex()
-    category = RegistryCategories.algorithms
-    namespace = get_namespace(__module__)
-    algorithm = RandomForestRegressor
-    args = {'n_estimators' : 300, 'min_samples_leaf' : 1}
-
-    help_text = "Train and predict with Random Forest."
 
 
