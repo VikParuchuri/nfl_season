@@ -1,7 +1,7 @@
 from __future__ import division
 from percept.tasks.base import Task
 from percept.tasks.train import SVMTrain
-from percept.fields.base import Complex, List, Dict
+from percept.fields.base import Complex, List, Dict, Float
 from inputs.inputs import NFLFormats
 from percept.utils.models import RegistryCategories, get_namespace
 import logging
@@ -330,7 +330,8 @@ class RandomForestTrain(SVMTrain):
 
 class CrossValidate(Task):
     data = Complex()
-    results = Dict()
+    results = Complex()
+    error = Float()
 
     data_format = NFLFormats.dataframe
 
@@ -349,7 +350,7 @@ class CrossValidate(Task):
         nfolds = kwargs.get('nfolds', 3)
         algo = kwargs.get('algo')
         seed = kwargs.get('seed', 1)
-        non_predictors = [i.replace(" ", "_").lower() for i in list(set(data['team']))] + ["next_year_wins", "team"]
+        non_predictors = [i.replace(" ", "_").lower() for i in list(set(data['team']))] + ["team", "nn"]
         fold_length = int(math.floor(data_len/nfolds))
         folds = []
         data_seq = list(xrange(0,data_len))
@@ -380,9 +381,16 @@ class CrossValidate(Task):
         full_results = list(chain.from_iterable(results))
         full_indices = list(chain.from_iterable(folds))
         partial_result_df = make_df([full_results, full_indices], ["result", "index"])
-        result_df = pd.concat([partial_result_df, data[['next_year_wins', 'team', 'year']]], axis=1)
-        result_df = result_df.sort(["index"])
+        partial_result_df = partial_result_df.sort(["index"])
+        partial_result_df.index = range(partial_result_df.shape[0])
+        result_df = pd.concat([partial_result_df, data[['next_year_wins', 'team', 'year', 'total_wins']]], axis=1)
+        result_df = result_df[(result_df['next_year_wins']>0) & result_df['total_wins']>0]
         self.results = result_df
+        self.calc_error(result_df)
+
+    def calc_error(self, result_df):
+        filtered_df = result_df[result_df['year']<np.max(result_df['year'])]
+        self.error = np.mean(np.abs(filtered_df['result'] - filtered_df['next_year_wins']))
 
     def predict(self, data, **kwargs):
         """
