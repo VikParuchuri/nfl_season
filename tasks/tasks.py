@@ -422,7 +422,7 @@ class CrossValidate(Task):
         pass
 
 class SequentialValidate(CrossValidate):
-    args = {'min_years' : 4, 'algo' : RandomForestTrain}
+    args = {'min_years' : 10, 'algo' : RandomForestTrain}
     def sequential_validate(self, data, non_predictors, **kwargs):
         algo = kwargs.get('algo')
         seed = kwargs.get('seed', 1)
