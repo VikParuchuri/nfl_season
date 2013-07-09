@@ -294,9 +294,12 @@ class GenerateSOSFeatures(Task):
                         loss_list.append(sos[opp])
             opp_stats = self.calc_opp_stats(opp_list, "opp")
             target_frame = make_df([next_year_wins], ["next_year_wins"])
-            last_3 = data.loc[(data['team']==team) & (data['year']<year) & (data['year']>year-4), :]
-            last_3_row = last_3.mean(axis=1)
-            last_3_row.columns = ["last_3_" + l for l in list(last_3.columns)]
+            last_3 = data.loc[(data['team']==team) & (data['year']<year) & (data['year']>year-4),:]
+            if last_3.shape[0]>0:
+                last_3_row = pd.DataFrame(list(last_3.mean(axis=0))).T
+            else:
+                last_3_row = pd.DataFrame([0 for l in xrange(0,data.shape[1])]).T
+            last_3_row.columns = ["last_3" + str(l) for l in last_3_row.columns]
             sos_row = pd.concat([opp_stats, target_frame, last_3_row], axis=1)
             sos_data.append(sos_row)
         sos_frame = pd.concat(sos_data)
@@ -333,6 +336,7 @@ class CrossValidate(Task):
     results = Complex()
     error = Float()
     importances = Complex()
+    importance = Complex()
     column_names = List()
 
     data_format = NFLFormats.dataframe
@@ -399,6 +403,7 @@ class CrossValidate(Task):
         result_df = result_df[(result_df['next_year_wins']>0) & result_df['total_wins']>0]
         self.results = result_df
         self.calc_error(result_df)
+        self.calc_importance(self.importances, self.column_names)
 
     def calc_error(self, result_df):
         filtered_df = result_df[result_df['year']<np.max(result_df['year'])]
@@ -454,6 +459,7 @@ class SequentialValidate(CrossValidate):
         self.results = result_df
         self.calc_error(result_df)
         self.column_names = [l for l in list(data.columns) if l not in non_predictors]
+        self.calc_importance(self.importances, self.column_names)
 
     def train(self, data, target, **kwargs):
         """
