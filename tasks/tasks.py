@@ -1,6 +1,6 @@
 from __future__ import division
 from percept.tasks.base import Task
-from percept.tasks.train import SVMTrain
+from percept.tasks.train import Train
 from percept.fields.base import Complex, List, Dict, Float
 from inputs.inputs import NFLFormats
 from percept.utils.models import RegistryCategories, get_namespace
@@ -317,7 +317,7 @@ class GenerateSOSFeatures(Task):
         df = make_df([opp_total_wins, opp_total_losses, opp_home_wins, opp_road_wins], ["opp_total_wins", "opp_total_losses", "opp_home_wins", "opp_road_wins"], name_prefix= name_prefix)
         return df
 
-class RandomForestTrain(SVMTrain):
+class RandomForestTrain(Train):
     """
     A class to train a random forest
     """
@@ -329,22 +329,6 @@ class RandomForestTrain(SVMTrain):
     args = {'n_estimators' : 300, 'min_samples_leaf' : 1, 'compute_importances' : True}
 
     help_text = "Train and predict with Random Forest."
-
-class Validate(Task):
-    data = Complex()
-    results = Complex()
-    error = Float()
-    importances = Complex()
-    importance = Complex()
-    column_names = List()
-
-    data_format = NFLFormats.dataframe
-
-    category = RegistryCategories.preprocessors
-    namespace = get_namespace(__module__)
-
-    help_text = "Validate."
-
 
 class CrossValidate(Task):
     data = Complex()
