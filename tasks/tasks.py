@@ -279,7 +279,6 @@ class GenerateSOSFeatures(Task):
             sel_data = data.iloc[i,:]
             team = sel_data['team']
             year = sel_data['year']
-            next_year = year+1
             next_year_wins = data.loc[(data['team']==team) & (data['year']==year+1), 'total_wins']
             if next_year_wins.shape[0] == 0:
                 next_year_wins = sel_data['total_wins']
@@ -294,10 +293,11 @@ class GenerateSOSFeatures(Task):
                     else:
                         loss_list.append(sos[opp])
             opp_stats = self.calc_opp_stats(opp_list, "opp")
-            win_stats = self.calc_opp_stats(opp_list, "opp_win")
-            loss_stats = self.calc_opp_stats(opp_list, "opp_loss")
             target_frame = make_df([next_year_wins], ["next_year_wins"])
-            sos_row = pd.concat([opp_stats, win_stats, loss_stats, target_frame], axis=1)
+            last_3 = data.loc[(data['team']==team) & (data['year']<year) & (data['year']>year-4), :]
+            last_3_row = last_3.mean(axis=1)
+            last_3_row.columns = ["last_3_" + l for l in list(last_3.columns)]
+            sos_row = pd.concat([opp_stats, target_frame, last_3_row], axis=1)
             sos_data.append(sos_row)
         sos_frame = pd.concat(sos_data)
         full_data = pd.concat([data, sos_frame], axis=1)
@@ -332,6 +332,8 @@ class CrossValidate(Task):
     data = Complex()
     results = Complex()
     error = Float()
+    importances = Complex()
+    column_names = List()
 
     data_format = NFLFormats.dataframe
 
@@ -364,6 +366,7 @@ class CrossValidate(Task):
 
         results = []
         data.index = range(data.shape[0])
+        self.importances = []
         for (i,fold) in enumerate(folds):
             predict_data = data.iloc[fold,:]
             out_indices = list(chain.from_iterable(folds[:i] + folds[(i + 1):]))
@@ -372,8 +375,9 @@ class CrossValidate(Task):
             target = train_data['next_year_wins']
             train_data = train_data[[l for l in list(train_data.columns) if l not in non_predictors]]
             predict_data = predict_data[[l for l in list(predict_data.columns) if l not in non_predictors]]
-            alg.train(train_data,target)
+            clf = alg.train(train_data,target,**algo.args)
             results.append(alg.predict(predict_data))
+            self.importances.append(clf.feature_importances_)
         return results, folds
 
     def train(self, data, target, **kwargs):
@@ -381,6 +385,7 @@ class CrossValidate(Task):
         Used in the training phase.  Override.
         """
         non_predictors = [i.replace(" ", "_").lower() for i in list(set(data['team']))] + ["team", "next_year_wins"]
+        self.column_names = [l for l in list(data.columns) if l not in non_predictors]
         results, folds = self.cross_validate(data, non_predictors, **kwargs)
         self.gather_results(results, folds, data)
 
@@ -398,6 +403,12 @@ class CrossValidate(Task):
     def calc_error(self, result_df):
         filtered_df = result_df[result_df['year']<np.max(result_df['year'])]
         self.error = np.mean(np.abs(filtered_df['result'] - filtered_df['next_year_wins']))
+
+    def calc_importance(self, importances, col_names):
+        importance_frame = pd.DataFrame(importances)
+        importance_frame.columns = col_names
+        self.importance = importance_frame.mean(axis=0)
+        self.importance.sort(0)
 
     def predict(self, data, **kwargs):
         """
@@ -420,7 +431,8 @@ class SequentialValidate(CrossValidate):
         end_year = np.max(data['year'])
         results = []
         predict_rows = []
-        for year in xrange(start_year, end_year):
+        self.importances = []
+        for year in xrange(start_year, end_year+1):
             train_data = data[data['year']< year]
             predict_full = data[data['year'] == year]
 
@@ -430,9 +442,10 @@ class SequentialValidate(CrossValidate):
             train_data = train_data[[l for l in list(train_data.columns) if l not in non_predictors]]
             predict_data = predict_full[[l for l in list(predict_full.columns) if l not in non_predictors]]
 
-            alg.train(train_data,target)
+            clf = alg.train(train_data,target, **algo.args)
             results.append(alg.predict(predict_data))
             predict_rows.append(predict_full)
+            self.importances.append(clf.feature_importances_)
         predict_frame = pd.concat(predict_rows)
         predict_frame.index = range(predict_frame.shape[0])
         full_results = list(chain.from_iterable(results))
@@ -440,6 +453,7 @@ class SequentialValidate(CrossValidate):
         result_df = predict_frame[['next_year_wins', 'team', 'year', 'total_wins', 'result']]
         self.results = result_df
         self.calc_error(result_df)
+        self.column_names = [l for l in list(data.columns) if l not in non_predictors]
 
     def train(self, data, target, **kwargs):
         """
