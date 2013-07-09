@@ -330,6 +330,21 @@ class RandomForestTrain(SVMTrain):
 
     help_text = "Train and predict with Random Forest."
 
+class Validate(Task):
+    data = Complex()
+    results = Complex()
+    error = Float()
+    importances = Complex()
+    importance = Complex()
+    column_names = List()
+
+    data_format = NFLFormats.dataframe
+
+    category = RegistryCategories.preprocessors
+    namespace = get_namespace(__module__)
+
+    help_text = "Validate."
+
 
 class CrossValidate(Task):
     data = Complex()
